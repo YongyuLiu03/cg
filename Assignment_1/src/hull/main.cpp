@@ -19,13 +19,14 @@ struct Compare {
 	Point p0; // Leftmost point of the poly
 	bool operator ()(const Point &p1, const Point &p2) {
 		// TODO
-		return true;
+		return (std::arg(p1 - p0) < std::arg(p2 - p0));
 	}
 };
 
 bool inline salientAngle(Point &a, Point &b, Point &c) {
 	// TODO
-	return false;
+	double val = (b.imag() - a.imag()) * (c.real() - b.real()) - (c.imag() - b.imag()) * (b.real() - a.real());
+	return (val <= 0)? true: false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -33,12 +34,27 @@ bool inline salientAngle(Point &a, Point &b, Point &c) {
 Polygon convex_hull(std::vector<Point> &points) {
 	Compare order;
 	// TODO
-	order.p0 = Point(0, 0);
+	Point lowest_p = points[0];
+	for (int i = 0; i < points.size(); i++){
+		if ((points[i].imag() < lowest_p.imag()) || 
+			(points[i].imag() == lowest_p.imag() && points[i].real() < lowest_p.real())) {
+			lowest_p = points[i];
+		}
+	}
+	order.p0 = lowest_p;
 	std::sort(points.begin(), points.end(), order);
 	Polygon hull;
 	// TODO
 	// use salientAngle(a, b, c) here
-	return hull;
+	for (int i = 0; i < points.size(); i++){
+		
+		while (hull.size() > 1 && !salientAngle(hull.end()[-2], hull.end()[-1], points[i])) {
+			hull.pop_back();
+		}
+		hull.push_back(points[i]);
+		
+	}
+	return hull;	
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -47,6 +63,16 @@ std::vector<Point> load_xyz(const std::string &filename) {
 	std::vector<Point> points;
 	std::ifstream in(filename);
 	// TODO
+	double x, y;
+	int z, size;
+
+	in >> size;
+	for (int i = 0; i < size; i++) {
+		in >> x >> y >> z;
+		const Point point = Point(x, y);
+		points.push_back(point);
+	}
+	in.close();
 	return points;
 }
 
