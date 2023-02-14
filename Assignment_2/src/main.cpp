@@ -26,6 +26,9 @@ void raytrace_sphere() {
 	Vector3d x_displacement(2.0/C.cols(),0,0);
 	Vector3d y_displacement(0,-2.0/C.rows(),0);
 
+	Vector3d sphere_origin(0, 0, 0);
+	const double sphere_radius = 0.9;
+
 	// Single light source
 	const Vector3d light_position(-1,1,1);
 
@@ -36,13 +39,15 @@ void raytrace_sphere() {
 			Vector3d ray_direction = RowVector3d(0,0,-1);
 
 			// Intersect with the sphere
-			// NOTE: this is a special case of a sphere centered in the origin and for orthographic rays aligned with the z axis
-			Vector2d ray_on_xy(ray_origin(0),ray_origin(1));
-			const double sphere_radius = 0.9;
+			const double a = ray_direction.squaredNorm();
+			const double b = (ray_origin-sphere_origin).dot(2*ray_direction);
+			const double c = (ray_origin-sphere_origin).squaredNorm() - pow(sphere_radius, 2);
+			const double d = pow(b, 2) - 4*a*c;
 
-			if (ray_on_xy.norm() < sphere_radius) {
+			if (d >= 0) {
 				// The ray hit the sphere, compute the exact intersection point
-				Vector3d ray_intersection(ray_on_xy(0),ray_on_xy(1),sqrt(sphere_radius*sphere_radius - ray_on_xy.squaredNorm()));
+				const double t = (-b-sqrt(d))/(2*a);
+				Vector3d ray_intersection = ray_origin + t*ray_direction;
 
 				// Compute normal at the intersection point
 				Vector3d ray_normal = ray_intersection.normalized();

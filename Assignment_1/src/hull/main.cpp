@@ -16,7 +16,7 @@ double inline det(const Point &u, const Point &v) {
 }
 
 struct Compare {
-	Point p0; // Leftmost point of the poly
+	Point p0; // Lowest point of the poly
 	bool operator ()(const Point &p1, const Point &p2) {
 		// TODO
 		return (std::arg(p1 - p0) < std::arg(p2 - p0));
