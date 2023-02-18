@@ -1,1 +1,8 @@
+<<<<<<< HEAD
 **/build
+=======
+Assignment_5/build/*
+Assignment_5/buildRelease/*
+.vscode/*
+*/build*/*
+>>>>>>> 0b17bba2cc22f06637b2cd87f0616fa52b57a3a6
