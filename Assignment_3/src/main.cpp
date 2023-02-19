@@ -130,24 +130,27 @@ double lerp(double a0, double a1, double w)
     assert(w >= 0);
     assert(w <= 1);
     //TODO implement linear and cubic interpolation
-    return 0;
+    return a0 + (a1-a0)*w;
+    // return (a1 - a0) * (3.0 - w * 2.0) * w * w + a0; // cubic
 }
 
 // Computes the dot product of the distance and gradient vectors.
 double dotGridGradient(int ix, int iy, double x, double y)
 {
     //TODO: Compute the distance vector
+    double dx = x - (double)ix;
+    double dy = y - (double)iy;
     //TODO: Compute and return the dot-product
-    return 0;
+    return dx*grid[iy][ix][0] + dy*grid[iy][ix][1];
 }
 
 // Compute Perlin noise at coordinates x, y
 double perlin(double x, double y)
 {
     //TODO: Determine grid cell coordinates x0, y0
-    int x0 = 0;
+    int x0 = std::floor(x);
     int x1 = x0 + 1;
-    int y0 = 0;
+    int y0 = std::floor(y);
     int y1 = y0 + 1;
 
     // Determine interpolation weights
@@ -178,8 +181,8 @@ Vector4d procedural_texture(const double tu, const double tv)
     assert(tv <= 1);
 
     //TODO: uncomment these lines once you implement the perlin noise
-    // const double color = (perlin(tu * grid_size, tv * grid_size) + 1) / 2;
-    // return Vector4d(0, color, 0, 0);
+    const double color = (perlin(tu * grid_size, tv * grid_size) + 1) / 2;
+    return Vector4d(0, color, 0, 0);
 
     //Example for checkerboard texture
     const double color = (int(tu * grid_size) + int(tv * grid_size)) % 2 == 0 ? 0 : 1;
@@ -195,22 +198,21 @@ double ray_sphere_intersection(const Vector3d &ray_origin, const Vector3d &ray_d
 {
     // TODO, implement the intersection between the ray and the sphere at index index.
     //return t or -1 if no intersection
-
     const Vector3d sphere_center = sphere_centers[index];
     const double sphere_radius = sphere_radii[index];
 
     double t = -1;
 
-    if (false)
-    {
-        return -1;
-    }
-    else
-    {
-        //TODO set the correct intersection point, update p to the correct value
-        p = ray_origin;
-        N = ray_direction;
+    const double a = ray_direction.squaredNorm();
+    const double b = (ray_origin-sphere_center).dot(2*ray_direction);
+    const double c = (ray_origin-sphere_center).squaredNorm() - pow(sphere_radius, 2);
+    const double d = pow(b, 2) - 4*a*c;
 
+    if (d >= 0) {
+        //TODO set the correct intersection point, update p to the correct value
+        t = (-b-sqrt(d))/(2*a);
+        p = ray_origin + t*ray_direction;
+        N = p.normalized();
         return t;
     }
 
@@ -229,15 +231,21 @@ double ray_parallelogram_intersection(const Vector3d &ray_origin, const Vector3d
     const Vector3d pgram_u = A - pgram_origin;
     const Vector3d pgram_v = B - pgram_origin;
 
-    if (false)
-    {
-        return -1;
+    Vector3d RHS(ray_origin-pgram_origin);
+    Matrix3d LHS;
+    LHS << pgram_u, pgram_v, -ray_direction;
+    Vector3d x = LHS.colPivHouseholderQr().solve(RHS);
+    double u, v, t;
+    u = x(0);
+    v = x(1);
+    t = x(2);
+    
+    if (u>=0 && u<=1 && v>=0 && v<=1 && t>0) {
+        //TODO set the correct intersection point, update p and N to the correct values
+        p = ray_origin + t*ray_direction;
+        N = p.normalized();
+        return t;
     }
-
-    //TODO set the correct intersection point, update p and N to the correct values
-    p = ray_origin;
-    N = p.normalized();
-
     return -1;
 }
 
