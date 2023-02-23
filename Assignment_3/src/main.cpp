@@ -185,8 +185,8 @@ Vector4d procedural_texture(const double tu, const double tv)
     return Vector4d(0, color, 0, 0);
 
     //Example for checkerboard texture
-    const double color = (int(tu * grid_size) + int(tv * grid_size)) % 2 == 0 ? 0 : 1;
-    return Vector4d(0, color, 0, 0);
+    // const double color = (int(tu * grid_size) + int(tv * grid_size)) % 2 == 0 ? 0 : 1;
+    // return Vector4d(0, color, 0, 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -239,7 +239,7 @@ double ray_parallelogram_intersection(const Vector3d &ray_origin, const Vector3d
     u = x(0);
     v = x(1);
     t = x(2);
-    
+
     if (u>=0 && u<=1 && v>=0 && v<=1 && t>0) {
         //TODO set the correct intersection point, update p and N to the correct values
         p = ray_origin + t*ray_direction;
@@ -403,8 +403,8 @@ void raytrace_scene()
     // The sensor grid is at a distance 'focal_length' from the camera center,
     // and covers an viewing angle given by 'field_of_view'.
     double aspect_ratio = double(w) / double(h);
-    double image_y = 1; //TODO: compute the correct pixels size
-    double image_x = 1; //TODO: compute the correct pixels size
+    double image_y = focal_length*sin(field_of_view)/(1+cos(field_of_view)); //TODO: compute the correct pixels size
+    double image_x = aspect_ratio*focal_length*sin(field_of_view)/(1+cos(field_of_view)); //TODO: compute the correct pixels size
 
     // The pixel grid through which we shoot rays is at a distance 'focal_length'
     const Vector3d image_origin(-image_x, image_y, -image_z);
