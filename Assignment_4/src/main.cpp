@@ -137,6 +137,8 @@ AlignedBox3d bbox_from_triangle(const Vector3d &a, const Vector3d &b, const Vect
     return box;
 }
 
+int recursive_construct(int &pos, std::vector<AABBTree::Node> &nodes, const std::vector<int> &fi, const MatrixXd &V, const MatrixXi &F);
+
 AABBTree::AABBTree(const MatrixXd &V, const MatrixXi &F)
 {
     // Compute the centroids of all the triangles in the input mesh
@@ -154,24 +156,41 @@ AABBTree::AABBTree(const MatrixXd &V, const MatrixXi &F)
     // TODO
     // Split each set of primitives into 2 sets of roughly equal size,
     // based on sorting the centroids along one direction or another.
-    std::vector<size_t> fi(F.rows());
+    std::vector<int> fi(F.rows());
     std::iota(fi.begin(), fi.end(), 0);
-    std::stable_sort(fi.begin(), fi.end(), [&centroids](size_t i1, size_t i2) {return centroids[i1] < centroids[i2];});
-
-    AABBTree T1, T2;
-    nodes.insert(nodes.end(), std::make_move_iterator(T1.nodes.begin()), std::make_move_iterator(T1.nodes.end()));
-    
-
-    root = 0;
-    Node root_node;
-    root_node.bbox = T1.nodes[T1.root].bbox.merged(T2.nodes[T2.root].bbox);
-    T1.nodes[T1.root].parent = 0;
-    T2.nodes[T2.root].parent - 0;
-    nodes.push_back(root_node);
-    nodes.
-    nodes;
+    std::stable_sort(fi.begin(), fi.end(), [&centroids](int i1, int i2) {return centroids(i1, 0) < centroids(i2, 0);});
+    int pos = 0;
+    recursive_construct(pos, nodes, fi, V, F);
+    root = pos;
 }
 
+int recursive_construct(int &pos, std::vector<AABBTree::Node> &nodes, const std::vector<int> &fi, const MatrixXd &V, const MatrixXi &F) {
+    if (fi.size()==1) {
+        AABBTree::Node leaf;
+        leaf.bbox = bbox_from_triangle(V.row(F(fi[0], 0)), V.row(F(fi[0], 1)), V.row(F(fi[0], 2)));
+        leaf.left = -1;
+        leaf.right = -1;
+        leaf.triangle = fi[0];
+        nodes.push_back(leaf);
+        return pos++;
+    } else {
+        const std::size_t half_size = fi.size() / 2;
+        const std::vector<int> fi_left(fi.begin(), fi.begin()+half_size);
+        const std::vector<int> fi_right(fi.begin()+half_size, fi.end());
+        int left_pos = recursive_construct(pos, nodes, fi_left, V, F);
+        int right_pos = recursive_construct(pos, nodes, fi_right, V, F);
+        nodes[left_pos].parent = pos;
+        nodes[right_pos].parent = pos;
+        AABBTree::Node root;
+        root.bbox = nodes[left_pos].bbox.merged(nodes[right_pos].bbox);
+        root.left = left_pos;
+        root.right = right_pos;
+        root.parent = -1;
+        root.triangle = -1;
+        nodes.push_back(root);
+        return pos++;
+    }
+}
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -204,16 +223,23 @@ bool ray_box_intersection(const Vector3d &ray_origin, const Vector3d &ray_direct
     // TODO
     // Compute whether the ray intersects the given box.
     // we are not testing with the real surface here anyway.
-    double tx_max, ty_max, tz_max, tx_min, ty_min, tz_min, t_max, t_min;
-    tx_max = (box.max().x() - ray_origin(0))/ray_direction(0);
-    ty_max = (box.max().y() - ray_origin(1))/ray_direction(1);
-    tz_max = (box.max().z() - ray_origin(2))/ray_direction(2);
-    tx_min = (box.min().x() - ray_origin(0))/ray_direction(0);
-    ty_min = (box.min().y() - ray_origin(1))/ray_direction(1);
-    tz_min = (box.min().z() - ray_origin(2))/ray_direction(2);
-    t_max = std::min(std::min(tx_max,ty_max), tz_max);
-    t_min = std::max(std::max(tx_min,ty_min), tz_min);
-    return (t_max>t_min && t_min>0);
+    double tx1, tx2, ty1, ty2, tz1, tz2, t_max, t_min;
+    tx1 = (box.max().x() - ray_origin(0))/ray_direction(0);
+    tx2 = (box.min().x() - ray_origin(0))/ray_direction(0);
+    t_max = std::max(tx1, tx2);
+    t_min = std::min(tx1, tx2);
+
+    ty1 = (box.max().y() - ray_origin(1))/ray_direction(1);
+    ty2 = (box.min().y() - ray_origin(1))/ray_direction(1);
+    t_max = std::min(t_max, std::max(ty1, ty2));
+    t_min = std::max(t_min, std::min(ty1, ty2));
+
+    tz1 = (box.max().z() - ray_origin(2))/ray_direction(2);
+    tz2 = (box.min().z() - ray_origin(2))/ray_direction(2);
+    t_max = std::min(t_max, std::max(tz1, tz2));
+    t_min = std::max(t_min, std::min(tz1, tz2));
+
+    return (t_max>=t_min && t_min>=0);
 }
 
 //Finds the closest intersecting object returns its index
@@ -221,11 +247,10 @@ bool ray_box_intersection(const Vector3d &ray_origin, const Vector3d &ray_direct
 bool find_nearest_object(const Vector3d &ray_origin, const Vector3d &ray_direction, Vector3d &p, Vector3d &N)
 {
     Vector3d tmp_p, tmp_N;
-
+    double closest_t = std::numeric_limits<double>::max();
     // TODO
     // Method (1): Traverse every triangle and return the closest hit.
     // int closest_index = -1;
-    // double closest_t = std::numeric_limits<double>::max();
     // for (int i = 0; i < facets.rows(); i++) {
     //     const Vector3d a = vertices.row(facets(i, 0));
     //     const Vector3d b = vertices.row(facets(i, 1));
@@ -241,29 +266,42 @@ bool find_nearest_object(const Vector3d &ray_origin, const Vector3d &ray_directi
     // return (closest_index != -1);
     // Method (2): Traverse the BVH tree and test the intersection with a
     // triangles at the leaf nodes that intersects the input ray.
-    int node_i = bvh.root;
     AABBTree::Node node, left, right;
-    node = bvh.nodes[node_i];
-    while (node.triangle == -1) {
+    std::vector<AABBTree::Node> nodes;
+    nodes.push_back(bvh.nodes[bvh.root]);
+
+    
+    std::vector<int> triangles;
+    while (nodes.size()!=0) {
+
+        node = nodes.back();
+        nodes.pop_back();
+        std::cout << node.bbox.TopRightCeil().x() << '?';
+        if (node.triangle != -1) {
+            triangles.push_back(node.triangle);
+            continue;
+        }
         left = bvh.nodes[node.left];
         right = bvh.nodes[node.right];
         if (ray_box_intersection(ray_origin, ray_direction, left.bbox)) {
-            node = left;
-        } else if (ray_box_intersection(ray_origin, ray_direction, right.bbox)) {
-            node = right;
-        } else {
-            return false;
+            nodes.push_back(left);
+        }
+        if (ray_box_intersection(ray_origin, ray_direction, right.bbox)) {
+            nodes.push_back(right);
         }
     }
-    const Vector3d a = vertices.row(facets(node.triangle, 0));
-    const Vector3d b = vertices.row(facets(node.triangle, 1));
-    const Vector3d c = vertices.row(facets(node.triangle, 2));
-    if (ray_triangle_intersection(ray_origin, ray_direction, a, b, c, tmp_p, tmp_N) != -1) {
-        p = tmp_p;
-        N = tmp_N;
-        return true;
+    for (int i: triangles) {
+        // std::cout << i << ' ';
+        const Vector3d a = vertices.row(facets(i, 0));
+        const Vector3d b = vertices.row(facets(i, 1));
+        const Vector3d c = vertices.row(facets(i, 2));
+        const double t = ray_triangle_intersection(ray_origin, ray_direction, a, b, c, tmp_p, tmp_N);
+        if (t>=0 && t<closest_t) {
+            p = tmp_p;
+            N = tmp_N;
+        }
     }
-    return false;
+    return (triangles.size() != 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
