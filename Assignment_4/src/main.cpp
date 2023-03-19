@@ -46,7 +46,7 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 const std::string data_dir = DATA_DIR;
 const std::string filename("raytrace.png");
-const std::string mesh_filename(data_dir + "dodeca.off");
+const std::string mesh_filename(data_dir + "bunny.off");
 
 //Camera settings
 const double focal_length = 2;
@@ -152,10 +152,27 @@ AABBTree::AABBTree(const MatrixXd &V, const MatrixXi &F)
     }
 
     // TODO
-
     // Split each set of primitives into 2 sets of roughly equal size,
     // based on sorting the centroids along one direction or another.
+    std::vector<size_t> fi(F.rows());
+    std::iota(fi.begin(), fi.end(), 0);
+    std::stable_sort(fi.begin(), fi.end(), [&centroids](size_t i1, size_t i2) {return centroids[i1] < centroids[i2];});
+
+    AABBTree T1, T2;
+    nodes.insert(nodes.end(), std::make_move_iterator(T1.nodes.begin()), std::make_move_iterator(T1.nodes.end()));
+    
+
+    root = 0;
+    Node root_node;
+    root_node.bbox = T1.nodes[T1.root].bbox.merged(T2.nodes[T2.root].bbox);
+    T1.nodes[T1.root].parent = 0;
+    T2.nodes[T2.root].parent - 0;
+    nodes.push_back(root_node);
+    nodes.
+    nodes;
 }
+
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Intersection code
@@ -166,7 +183,19 @@ double ray_triangle_intersection(const Vector3d &ray_origin, const Vector3d &ray
     // TODO
     // Compute whether the ray intersects the given triangle.
     // If you have done the parallelogram case, this should be very similar to it.
-
+    Vector3d RHS(ray_origin-a);
+    Matrix3d LHS;
+    LHS << b-a, c-a, -ray_direction;
+    Vector3d x = LHS.colPivHouseholderQr().solve(RHS);
+    double u, v, t;
+    u = x(0);
+    v = x(1);
+    t = x(2);
+    if (u>=0 && v>=0 && u+v<=1 && t>=0) {
+        p = ray_origin + t*ray_direction;
+        N = (b-a).cross(c-a).normalized();
+        return t;
+    }
     return -1;
 }
 
@@ -175,7 +204,16 @@ bool ray_box_intersection(const Vector3d &ray_origin, const Vector3d &ray_direct
     // TODO
     // Compute whether the ray intersects the given box.
     // we are not testing with the real surface here anyway.
-    return false;
+    double tx_max, ty_max, tz_max, tx_min, ty_min, tz_min, t_max, t_min;
+    tx_max = (box.max().x() - ray_origin(0))/ray_direction(0);
+    ty_max = (box.max().y() - ray_origin(1))/ray_direction(1);
+    tz_max = (box.max().z() - ray_origin(2))/ray_direction(2);
+    tx_min = (box.min().x() - ray_origin(0))/ray_direction(0);
+    ty_min = (box.min().y() - ray_origin(1))/ray_direction(1);
+    tz_min = (box.min().z() - ray_origin(2))/ray_direction(2);
+    t_max = std::min(std::min(tx_max,ty_max), tz_max);
+    t_min = std::max(std::max(tx_min,ty_min), tz_min);
+    return (t_max>t_min && t_min>0);
 }
 
 //Finds the closest intersecting object returns its index
@@ -186,9 +224,45 @@ bool find_nearest_object(const Vector3d &ray_origin, const Vector3d &ray_directi
 
     // TODO
     // Method (1): Traverse every triangle and return the closest hit.
+    // int closest_index = -1;
+    // double closest_t = std::numeric_limits<double>::max();
+    // for (int i = 0; i < facets.rows(); i++) {
+    //     const Vector3d a = vertices.row(facets(i, 0));
+    //     const Vector3d b = vertices.row(facets(i, 1));
+    //     const Vector3d c = vertices.row(facets(i, 2)); 
+    //     const double t = ray_triangle_intersection(ray_origin, ray_direction, a, b, c, tmp_p, tmp_N);
+    //     if (t>=0 && t<closest_t) {
+    //         closest_t = t;
+    //         closest_index = i;
+    //         p = tmp_p;
+    //         N = tmp_N;
+    //     }
+    // } 
+    // return (closest_index != -1);
     // Method (2): Traverse the BVH tree and test the intersection with a
     // triangles at the leaf nodes that intersects the input ray.
-
+    int node_i = bvh.root;
+    AABBTree::Node node, left, right;
+    node = bvh.nodes[node_i];
+    while (node.triangle == -1) {
+        left = bvh.nodes[node.left];
+        right = bvh.nodes[node.right];
+        if (ray_box_intersection(ray_origin, ray_direction, left.bbox)) {
+            node = left;
+        } else if (ray_box_intersection(ray_origin, ray_direction, right.bbox)) {
+            node = right;
+        } else {
+            return false;
+        }
+    }
+    const Vector3d a = vertices.row(facets(node.triangle, 0));
+    const Vector3d b = vertices.row(facets(node.triangle, 1));
+    const Vector3d c = vertices.row(facets(node.triangle, 2));
+    if (ray_triangle_intersection(ray_origin, ray_direction, a, b, c, tmp_p, tmp_N) != -1) {
+        p = tmp_p;
+        N = tmp_N;
+        return true;
+    }
     return false;
 }
 
@@ -262,8 +336,8 @@ void raytrace_scene()
     // and covers an viewing angle given by 'field_of_view'.
     double aspect_ratio = double(w) / double(h);
     //TODO
-    double image_y = 1;
-    double image_x = 1;
+    double image_y = focal_length * tan(field_of_view/2);
+    double image_x = image_y * aspect_ratio;
 
     // The pixel grid through which we shoot rays is at a distance 'focal_length'
     const Vector3d image_origin(-image_x, image_y, camera_position[2] - focal_length);
