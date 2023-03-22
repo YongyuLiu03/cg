@@ -32,6 +32,10 @@ const Vector3d camera_position(0, 0, 5);
 const int max_bounce = 5;
 
 const double epsilon = 1e-4;
+const int num_samples = 5;
+const double aperture = 0.1;
+const double PI = atan(1.0)*4;
+const double refra_ratio = 1/1.5;
 
 // Objects
 std::vector<Vector3d> sphere_centers;
@@ -68,13 +72,13 @@ void setup_scene()
     }
 
     //Spheres
-    sphere_centers.emplace_back(10, 0, 1);
+    sphere_centers.emplace_back(10, 0, 1); 
     sphere_radii.emplace_back(1);
 
     sphere_centers.emplace_back(7, 0.05, -1);
     sphere_radii.emplace_back(1);
 
-    sphere_centers.emplace_back(4, 0.1, 1);
+    sphere_centers.emplace_back(4, 0.1, -image_z);
     sphere_radii.emplace_back(1);
 
     sphere_centers.emplace_back(1, 0.2, -1);
@@ -183,12 +187,12 @@ Vector4d procedural_texture(const double tu, const double tv)
     assert(tv <= 1);
 
     //TODO: uncomment these lines once you implement the perlin noise
-    // const double color = (perlin(tu * grid_size, tv * grid_size) + 1) / 2;
-    // return Vector4d(0, color, 0, 0);
+    const double color = (perlin(tu * grid_size, tv * grid_size) + 1) / 2;
+    return Vector4d(0, color, 0, 0);
 
     //Example for checkerboard texture
-     const double color = (int(tu * grid_size) + int(tv * grid_size)) % 2 == 0 ? 0 : 1;
-     return Vector4d(0, color, 0, 0);
+    // const double color = (int(tu * grid_size) + int(tv * grid_size)) % 2 == 0 ? 0 : 1;
+    // return Vector4d(0, color, 0, 0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -314,8 +318,11 @@ bool is_light_visible(const Vector3d &ray_origin, const Vector3d &ray_direction,
     return (nearest_object < 0);
 }
 
-Vector4d shoot_ray(const Vector3d &ray_origin, const Vector3d &ray_direction, int max_bounce)
-{
+Vector4d shoot_ray(const Vector3d &ray_origin, const Vector3d &ray_direction, int max_bounce, double refra_ratio)
+{   
+    if (max_bounce <= 0) {
+        return Vector4d(0, 0, 0, 1);
+    }
     //Intersection point and normal, these are output of find_nearest_object
     Vector3d p, N;
 
@@ -381,18 +388,21 @@ Vector4d shoot_ray(const Vector3d &ray_origin, const Vector3d &ray_direction, in
     }
     // TODO: Compute the color of the reflected ray and add its contribution to the current point color.
     // use refl_color
-
     Vector4d reflection_color(0, 0, 0, 0);
-
-    if (max_bounce > 0) {
-        Vector3d hit_position = p+N*epsilon;
-        Vector3d refl_direction = ray_direction-2*N*(N.dot(ray_direction));
-        reflection_color += shoot_ray(hit_position, refl_direction, --max_bounce).cwiseProduct(refl_color);
-    }
-
+    const Vector3d refl_direction = (ray_direction - 2*N*(N.dot(ray_direction))).normalized();
+    reflection_color = shoot_ray(p + N*epsilon, refl_direction, --max_bounce, refra_ratio).cwiseProduct(refl_color);
+    
     // TODO: Compute the color of the refracted ray and add its contribution to the current point color.
     //       Make sure to check for total internal reflection before shooting a new ray.
     Vector4d refraction_color(0, 0, 0, 0);
+        double cos1 = N.dot(ray_direction);
+        double sin1 = sqrt(1-pow(cos1, 2));
+        double sin2 = sin1 * refra_ratio;
+        if (sin2 < 1.0) {
+            double cos2 = sqrt(1-pow(sin2, 2));
+            Vector3d refra_direction = (refra_ratio*ray_direction + (refra_ratio*cos1-cos2)*N).normalized();
+            refraction_color = shoot_ray(p - N*epsilon, refra_direction, max_bounce, 1/refra_ratio).cwiseProduct(obj_refraction_color);
+       }
 
     // Rendering equation
     Vector4d C = ambient_color + lights_color + reflection_color + refraction_color;
@@ -420,7 +430,7 @@ void raytrace_scene()
     // The sensor grid is at a distance 'focal_length' from the camera center,
     // and covers an viewing angle given by 'field_of_view'.
     double aspect_ratio = double(w) / double(h);
-    double image_y = focal_length*sin(field_of_view)/(1+cos(field_of_view)); //TODO: compute the correct pixels size
+    double image_y = focal_length*tan(field_of_view/2); //TODO: compute the correct pixels size
     double image_x = aspect_ratio * image_y; //TODO: compute the correct pixels size
 
     // The pixel grid through which we shoot rays is at a distance 'focal_length'
@@ -435,24 +445,54 @@ void raytrace_scene()
             // TODO: Implement depth of field
             const Vector3d pixel_center = image_origin + (i + 0.5) * x_displacement + (j + 0.5) * y_displacement;
 
-            // Prepare the ray
-            Vector3d ray_origin;
-            Vector3d ray_direction;
+            Vector4d C;
+            Vector3d p;
+            for (int i = 0; i < num_samples; i++) {
+                double theta = 2*PI*(double)rand()/(double)(RAND_MAX+1.0);
+                Vector3d offset(aperture*cos(theta)/2, aperture*sin(theta)/2, 0.0);
+                
+                // Prepare the ray
+                Vector3d ray_origin;
+                Vector3d ray_direction;
 
-            if (is_perspective)
-            {
-                // TODO: Perspective camera
-                ray_origin = camera_position;
-                ray_direction = pixel_center - camera_position;
-            }
-            else
-            {
-                // Orthographic camera
-                ray_origin = camera_position + Vector3d(pixel_center[0], pixel_center[1], 0);
-                ray_direction = Vector3d(0, 0, -1);
+                if (is_perspective)
+                {
+                    // TODO: Perspective camera
+                    ray_origin = camera_position + offset;
+                    ray_direction = (pixel_center - camera_position - offset).normalized();
+                }
+                else
+                {
+                    // Orthographic camera
+                    ray_origin = camera_position + Vector3d(pixel_center[0], pixel_center[1], 0);
+                    ray_direction = Vector3d(0, 0, -1);
+                }
+
+                C += shoot_ray(ray_origin, ray_direction, max_bounce, refra_ratio);
             }
 
-            const Vector4d C = shoot_ray(ray_origin, ray_direction, max_bounce);
+            C /= (double) num_samples;
+
+                
+            // // Prepare the ray
+            // Vector3d ray_origin;
+            // Vector3d ray_direction;
+
+            // if (is_perspective)
+            // {
+            //     // TODO: Perspective camera
+            //     ray_origin = camera_position;
+            //     ray_direction = (pixel_center - camera_position).normalized();
+            // }
+            // else
+            // {
+            //     // Orthographic camera
+            //     ray_origin = camera_position + Vector3d(pixel_center[0], pixel_center[1], 0);
+            //     ray_direction = Vector3d(0, 0, -1);
+            // }
+
+            // C = shoot_ray(ray_origin, ray_direction, max_bounce, refra_ratio);
+
             R(i, j) = C(0);
             G(i, j) = C(1);
             B(i, j) = C(2);
