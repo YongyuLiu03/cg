@@ -9,6 +9,12 @@ class VertexAttributes
 	{
 		position << x,y,z,w;
 		color << 1,1,1,1;
+		translate = Eigen::Matrix4d::Identity();
+		origin_translate = Eigen::Matrix4d::Identity();
+		origin_translate_back = Eigen::Matrix4d::Identity();
+		scale = Eigen::Matrix4d::Identity();
+		rotate = Eigen::Matrix4d::Identity();
+		scale = Eigen::Matrix4d::Identity();
 	}
 
     // Interpolates the vertex attributes
@@ -29,6 +35,12 @@ class VertexAttributes
 
 	Eigen::Vector4d position;
 	Eigen::Vector4d color;
+	Eigen::Matrix4d translate;
+	Eigen::Matrix4d origin_translate;
+	Eigen::Matrix4d origin_translate_back;
+	Eigen::Matrix4d rotate;
+	Eigen::Matrix4d scale;
+	Eigen::Vector4d barycenter;
 };
 
 class FragmentAttributes
@@ -56,4 +68,6 @@ class FrameBufferAttributes
 class UniformAttributes
 {
 	public:
+		Eigen::Matrix4d view = Eigen::Matrix4d::Identity();
+
 };
